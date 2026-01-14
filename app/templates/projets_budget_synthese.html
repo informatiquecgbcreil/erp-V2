@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="stack">
+
+  <div class="card">
+    {% include "_projet_budget_header.html" %}
+  </div>
+
+  <div class="card">
+    <div class="row three">
+      <div><strong>Total charges (prévisionnel)</strong><br>{{ "%.2f"|format(budget_stats.total_charges or 0) }}€</div>
+      <div><strong>Total produits demandés</strong><br>{{ "%.2f"|format(budget_stats.total_demande or 0) }}€</div>
+      <div><strong>Total produits accordés</strong><br>{{ "%.2f"|format(budget_stats.total_accorde or 0) }}€</div>
+      <div><strong>Total produits reçus</strong><br>{{ "%.2f"|format(budget_stats.total_recu or 0) }}€</div>
+      <div><strong>Reste à financer</strong><br>{{ "%.2f"|format(budget_stats.total_charges_reste or 0) }}€</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Alertes</h3>
+    <ul>
+    {% for a in alertes %}
+      <li>{{ a }}</li>
+    {% else %}
+      <li class="muted">Aucune alerte, c’est presque louche.</li>
+    {% endfor %}
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

@@ -50,7 +50,12 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
         except BuildError:
             return fallback
 
-    if user.role == "admin_tech":
+    has_perm = getattr(user, "has_perm", None)
+    has_scope_all = callable(has_perm) and has_perm("scope:all_secteurs")
+    has_business_access = callable(has_perm) and any(
+        has_perm(p) for p in ("subventions:view", "projets:view", "stats:view", "statsimpact:view")
+    )
+    if callable(has_perm) and has_perm("admin:users") and not has_business_access:
         return {
             "mode": "admin_tech",
             "kpis": {},
@@ -65,7 +70,7 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
 
     # --- périmètre ---
     subs_q = Subvention.query.filter_by(est_archive=False)
-    if user.role == "responsable_secteur":
+    if not has_scope_all:
         subs_q = subs_q.filter(Subvention.secteur == user.secteur_assigne)
     subs = subs_q.all()
 
@@ -116,7 +121,7 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
     # Sessions / présences / uniques
     sessions_q = SessionActivite.query.filter_by(is_deleted=False)
     pres_q = PresenceActivite.query
-    if user.role == "responsable_secteur":
+    if not has_scope_all:
         sessions_q = sessions_q.filter(SessionActivite.secteur == user.secteur_assigne)
         pres_q = pres_q.join(SessionActivite).filter(SessionActivite.secteur == user.secteur_assigne)
 
@@ -129,7 +134,7 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
 
     # Dépenses par mois (date_paiement sinon created_at)
     dep_q = Depense.query.filter_by(est_supprimee=False)
-    if user.role == "responsable_secteur":
+    if not has_scope_all:
         # LigneBudget n'a pas de colonne 'secteur' : le secteur est porté par la
         # Subvention (et/ou par les Projets). On filtre donc via Subvention.secteur.
         dep_q = (
@@ -196,7 +201,7 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
     recent_depenses = dep_q.order_by(Depense.created_at.desc()).limit(6).all()
     recent_sessions = sessions_q.order_by(SessionActivite.created_at.desc()).limit(6).all()
     recent_participants_q = Participant.query
-    if user.role == "responsable_secteur":
+    if not has_scope_all:
         recent_participants_q = recent_participants_q.filter(Participant.created_secteur == user.secteur_assigne)
     recent_participants = recent_participants_q.order_by(Participant.created_at.desc()).limit(6).all()
 
@@ -211,7 +216,7 @@ def build_dashboard_context(user, *, days: int = 90) -> Dict[str, Any]:
     ]
 
     return {
-        "mode": user.role,
+        "mode": "global" if has_scope_all else "secteur",
         "days": days,
         "kpis": {
             "attribue": round(total_attribue, 2),

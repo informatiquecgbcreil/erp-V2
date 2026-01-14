@@ -246,18 +246,15 @@ def _resolve_secteur_scope(flt: StatsFilters) -> Optional[str]:
       (le filtre secteur est respecté, sinon on agrège tout)
     - si aucun secteur user et pas view_all => accès restreint (0 résultat)
     """
-    role = getattr(current_user, "role", None)
-    is_admin_legacy = role in ("directrice", "finance", "financiere", "financière")
-
     user_sect = getattr(current_user, "secteur_assigne", None) or getattr(current_user, "secteur", None)
 
     has_perm = getattr(current_user, "has_perm", None)
     can_all = False
     if callable(has_perm):
-        can_all = any(has_perm(c) for c in ("stats:view_all", "statsimpact:view_all"))
+        can_all = any(has_perm(c) for c in ("scope:all_secteurs", "stats:view_all", "statsimpact:view_all"))
 
     # Accès multi-secteurs
-    if is_admin_legacy or can_all:
+    if can_all:
         return flt.secteur or None
 
     # Accès sectorisé strict (stats:view ou statsimpact:view sans view_all)

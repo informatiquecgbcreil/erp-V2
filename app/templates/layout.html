@@ -160,13 +160,11 @@
         <div class="brand">App Gestion</div>
 
         {% if current_user.is_authenticated %}
-          {% if not current_user.has_role("admin_tech") %}
-
-            {# ----------------------------
-               MENU UTILISATEUR (RBAC)
-               - On cache ce que l'user n'a pas le droit de voir
-               - Le serveur reste la source de vérité (require_perm)
-            ---------------------------- #}
+          {# ----------------------------
+             MENU UTILISATEUR (RBAC)
+             - On cache ce que l'user n'a pas le droit de voir
+             - Le serveur reste la source de vérité (require_perm)
+          ---------------------------- #}
 
             {% if can('dashboard:view') %}
               <a class="pill {% if ep.startswith('main.dashboard') %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard 📊</a>
@@ -230,7 +228,6 @@
               <a class="pill {% if ep.startswith('admin.droits') %}active{% endif %}" href="{{ url_for('admin.droits') }}">Droits 🔐</a>
             {% endif %}
             <a class="pill {% if ep.startswith('main.controle') %}active{% endif %}" href="{{ url_for('main.controle') }}">Contrôle ⚙</a>
-          {% endif %}
 
           <div class="right">
             <div class="pill" id="themeToggle" title="Changer de thème">🌙</div>

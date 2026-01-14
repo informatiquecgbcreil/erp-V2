@@ -28,7 +28,7 @@
           </div>
           <div>
             <label>Secteur</label>
-            {% if current_user.has_role('finance') or current_user.has_role('directrice') %}
+            {% if can('scope:all_secteurs') %}
               <input type="text" name="secteur" value="{{ item.secteur }}">
             {% else %}
               <input type="text" name="secteur" value="{{ item.secteur }}" readonly>

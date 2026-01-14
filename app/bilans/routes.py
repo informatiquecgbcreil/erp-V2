@@ -28,10 +28,6 @@ bp = Blueprint("bilans", __name__, url_prefix="")
 @login_required
 @require_perm("bilans:view")
 def dashboard():
-    # admin_tech : pas d'accès aux bilans financiers
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_dashboard.html", forbidden=True)
-
     scope = scope_for_user(current_user)
 
     years = list_exercice_years(scope)
@@ -68,11 +64,8 @@ def dashboard():
 
 @bp.route("/bilans/lourds")
 @login_required
+@require_perm("bilans:view")
 def bilans_lourds():
-    # admin_tech : pas d'accès aux bilans financiers
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_lourds.html", forbidden=True, year=datetime.date.today().year, stats=None)
-
     year = request.args.get("year", type=int) or datetime.date.today().year
     scope = scope_for_user(current_user)
     stats = compute_bilans_lourds(year, scope)
@@ -83,9 +76,6 @@ def bilans_lourds():
 @login_required
 @require_perm("bilans:view")
 def bilan_secteur():
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_secteur.html", forbidden=True)
-
     scope = scope_for_user(current_user)
     years = list_exercice_years(scope)
     year_param = request.args.get("year")
@@ -125,9 +115,6 @@ def bilan_secteur():
 @login_required
 @require_perm("bilans:view")
 def bilan_subvention():
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_subvention.html", forbidden=True)
-
     scope = scope_for_user(current_user)
     years = list_exercice_years(scope)
     year_param = request.args.get("year")
@@ -170,10 +157,8 @@ def bilan_subvention():
 
 @bp.route("/bilans/qualite")
 @login_required
+@require_perm("bilans:view")
 def qualite():
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_qualite.html", forbidden=True)
-
     scope = scope_for_user(current_user)
     years = list_exercice_years(scope)
     year_param = request.args.get("year")
@@ -190,10 +175,8 @@ def qualite():
 
 @bp.route("/bilans/inventaire")
 @login_required
+@require_perm("bilans:view")
 def inventaire():
-    if getattr(current_user, "role", None) == "admin_tech":
-        return render_template("bilans_inventaire.html", forbidden=True)
-
     scope = scope_for_user(current_user)
     years = list_exercice_years(scope)
     year_param = request.args.get("year")

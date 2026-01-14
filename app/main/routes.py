@@ -54,8 +54,7 @@ from flask import (
     abort, current_app, Response, jsonify
 )
 from flask_login import login_required, current_user
-from app.rbac import require_perm
-from ..rbac import require_perm
+from app.rbac import require_perm, can, can_access_secteur
 
 from app.extensions import db
 from app.models import Subvention, LigneBudget, Depense, Projet, SubventionProjet, AtelierActivite, SessionActivite, PresenceActivite, ProjetAtelier, ProjetIndicateur
@@ -65,11 +64,7 @@ bp = Blueprint("main", __name__)
 
 # --------- Permissions ---------
 def can_see_secteur(secteur: str) -> bool:
-    if current_user.role in ("directrice", "finance"):
-        return True
-    if current_user.role == "responsable_secteur":
-        return current_user.secteur_assigne == secteur
-    return False  # admin_tech n'accède pas aux données budgétaires
+    return can_access_secteur(secteur)
 
 
 def _compute_prorata(lignes, montant_cible: float):
@@ -113,6 +108,7 @@ def setup_start():
 # --------- Dashboard ---------
 @bp.route("/dashboard")
 @login_required
+@require_perm("dashboard:view")
 def dashboard():
     # Période "activité" (utilisée pour les KPIs atelier/participants)
     try:
@@ -127,14 +123,12 @@ def dashboard():
 # --------- List subventions ---------
 @bp.route("/subventions")
 @login_required
+@require_perm("subventions:view")
 def subventions_list():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     secteurs = current_app.config.get("SECTEURS", [])
 
     subs_q = Subvention.query.filter_by(est_archive=False)
-    if current_user.role == "responsable_secteur":
+    if not can("scope:all_secteurs"):
         subs_q = subs_q.filter(Subvention.secteur == current_user.secteur_assigne)
 
     subs = subs_q.order_by(Subvention.annee_exercice.desc(), Subvention.nom.asc()).all()
@@ -145,9 +139,6 @@ def subventions_list():
 @login_required
 @require_perm('subventions:edit')
 def subvention_create():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     nom = (request.form.get("nom") or "").strip()
     secteur = (request.form.get("secteur") or "").strip()
     annee = int(request.form.get("annee_exercice") or 2025)
@@ -156,7 +147,7 @@ def subvention_create():
     montant_attribue = float(request.form.get("montant_attribue") or 0)
     montant_recu = float(request.form.get("montant_recu") or 0)
 
-    if current_user.role == "responsable_secteur":
+    if not can("scope:all_secteurs"):
         secteur = current_user.secteur_assigne
 
     if not nom or not secteur:
@@ -184,15 +175,15 @@ def subvention_create():
 # --------- Pilotage subvention ---------
 @bp.route("/subvention/<int:subvention_id>/pilotage", methods=["GET", "POST"])
 @login_required
+@require_perm("subventions:view")
 def subvention_pilotage(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(sub.secteur):
         abort(403)
 
     if request.method == "POST":
+        if not can("subventions:edit"):
+            abort(403)
         action = request.form.get("action") or ""
 
         # --- Montants globaux ---
@@ -278,7 +269,7 @@ def subvention_pilotage(subvention_id):
 
     # --- GET : données pour page ---
     projets_q = Projet.query.filter(Projet.secteur == sub.secteur)
-    if current_user.role == "responsable_secteur":
+    if not can("scope:all_secteurs"):
         projets_q = projets_q.filter(Projet.secteur == current_user.secteur_assigne)
 
     projets = projets_q.order_by(Projet.nom.asc()).all()
@@ -318,9 +309,6 @@ def subvention_pilotage(subvention_id):
 @login_required
 @require_perm('subventions:delete')
 def subvention_delete(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(sub.secteur):
         abort(403)
@@ -334,10 +322,8 @@ def subvention_delete(subvention_id):
 # --------- Edit / Delete lignes ---------
 @bp.route("/ligne/<int:ligne_id>/edit", methods=["POST"])
 @login_required
+@require_perm("subventions:edit")
 def ligne_edit(ligne_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     l = LigneBudget.query.get_or_404(ligne_id)
     sub = l.source_sub
     if not can_see_secteur(sub.secteur):
@@ -358,9 +344,6 @@ def ligne_edit(ligne_id):
 @login_required
 @require_perm('budget:delete')
 def ligne_delete(ligne_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     l = LigneBudget.query.get_or_404(ligne_id)
     sub = l.source_sub
     if not can_see_secteur(sub.secteur):
@@ -376,10 +359,8 @@ def ligne_delete(ligne_id):
 # --------- Lier / délier subvention à projet ---------
 @bp.route("/subvention/<int:subvention_id>/toggle_projet", methods=["POST"])
 @login_required
+@require_perm("subventions:link")
 def subvention_toggle_projet(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(sub.secteur):
         abort(403)
@@ -407,10 +388,8 @@ def subvention_toggle_projet(subvention_id):
 # --------- APIs pour dropdowns dépenses ---------
 @bp.route("/api/subvention/<int:subvention_id>/comptes")
 @login_required
+@require_perm("subventions:view")
 def api_comptes(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(sub.secteur):
         abort(403)
@@ -427,10 +406,8 @@ def api_comptes(subvention_id):
 
 @bp.route("/api/subvention/<int:subvention_id>/lignes")
 @login_required
+@require_perm("subventions:view")
 def api_lignes(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(sub.secteur):
         abort(403)
@@ -463,8 +440,7 @@ def api_lignes(subvention_id):
 # --------- Stats ---------
 @bp.route("/stats")
 @login_required
-
-
+@require_perm("stats:view")
 def stats():
     """
     Vue synthèse des budgets avec représentation graphique.
@@ -473,8 +449,7 @@ def stats():
     Responsable de secteur : le filtre secteur est forcé sur son secteur.
     Option : filtre projet (projet_id) pour croiser finance + indicateurs participants.
     """
-    if current_user.role == "admin_tech":
-        abort(403)
+    has_global_scope = can("stats:view_all") or can("scope:all_secteurs")
 
     # --- Lecture filtres (année, secteur, projet) ---
     annee_raw = (request.args.get("annee") or "").strip()
@@ -516,7 +491,7 @@ def stats():
         sub_q = sub_q.join(SubventionProjet, SubventionProjet.subvention_id == Subvention.id)                   .filter(SubventionProjet.projet_id == selected_projet_id)
 
     # Restriction responsable secteur
-    if current_user.role == "responsable_secteur":
+    if not has_global_scope:
         sub_q = sub_q.filter(Subvention.secteur == current_user.secteur_assigne)
         proj_q = proj_q.filter(Projet.secteur == current_user.secteur_assigne)
         selected_secteur = current_user.secteur_assigne
@@ -747,10 +722,8 @@ def stats():
 # --- Hub ergonomique : 1 menu "Stats & bilans" ---
 @bp.route("/stats-bilans")
 @login_required
+@require_perm("stats:view")
 def stats_bilans():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     # Objectif : éviter la confusion entre 2 écrans. Ici on explique la différence
     # et on redirige vers l'écran choisi (sans casser l'existant).
     return render_template("stats_bilans.html")
@@ -760,6 +733,7 @@ def stats_bilans():
 # --------- Contrôle ---------
 @bp.route("/controle")
 @login_required
+@require_perm("controle:view")
 def controle():
     return render_template("controle.html")
 
@@ -771,8 +745,7 @@ from sqlalchemy import distinct
 @login_required
 @require_perm("bilans:view")
 def bilan_global():
-    if current_user.role == "admin_tech":
-        abort(403)
+    has_global_scope = can("scope:all_secteurs")
 
     # --- Lecture filtres ---
     annee_raw = (request.args.get("annee") or "").strip()
@@ -796,7 +769,7 @@ def bilan_global():
 
     # --- RESPONSABLE SECTEUR : on force le secteur, mais on autorise le filtre projet
     # uniquement si le projet appartient au même secteur.
-    if current_user.role == "responsable_secteur":
+    if not has_global_scope:
         selected_secteur = current_user.secteur_assigne
         if selected_projet_id:
             pjt = Projet.query.get(selected_projet_id)
@@ -857,12 +830,12 @@ def bilan_global():
     if not secteurs:
         secteurs = [r[0] for r in db.session.query(distinct(Subvention.secteur)).all() if r[0]]
 
-    if current_user.role == "responsable_secteur":
+    if not has_global_scope:
         secteurs = [current_user.secteur_assigne]
 
     # projets : uniquement ceux visibles
     projets_q = Projet.query
-    if current_user.role == "responsable_secteur":
+    if not has_global_scope:
         projets_q = projets_q.filter(Projet.secteur == current_user.secteur_assigne)
     projets = projets_q.order_by(Projet.secteur.asc(), Projet.nom.asc()).all()
 
@@ -890,12 +863,10 @@ def bilan():
 # --------- Exports simples ---------
 @bp.route("/export/depenses.csv")
 @login_required
+@require_perm("depenses:view")
 def export_depenses_csv():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     dep_q = Depense.query.join(LigneBudget).join(Subvention)
-    if current_user.role == "responsable_secteur":
+    if not can("scope:all_secteurs"):
         dep_q = dep_q.filter(Subvention.secteur == current_user.secteur_assigne)
 
     deps = dep_q.all()
@@ -928,10 +899,8 @@ def export_depenses_csv():
 
 @bp.route("/export/subvention/<int:subvention_id>.csv")
 @login_required
+@require_perm("subventions:view")
 def export_subvention_csv(subvention_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     s = Subvention.query.get_or_404(subvention_id)
     if not can_see_secteur(s.secteur):
         abort(403)
@@ -962,6 +931,7 @@ def export_subvention_csv(subvention_id):
 # --------- Bilan par subvention ---------
 @bp.route("/subvention/<int:subvention_id>/bilan")
 @login_required
+@require_perm("subventions:view")
 def subvention_bilan(subvention_id: int):
     """
     Vue détaillée pour un financeur / subvention.
@@ -969,9 +939,6 @@ def subvention_bilan(subvention_id: int):
     Affiche un récapitulatif des montants demandés/attribués/reçus et des lignes de budget,
     avec une représentation graphique proportionnelle par ligne (charges et produits).
     """
-    if current_user.role == "admin_tech":
-        abort(403)
-
     sub = Subvention.query.get_or_404(subvention_id)
     # Vérification des droits : un responsable ne peut consulter que son secteur
     if not can_see_secteur(sub.secteur):

@@ -15,7 +15,7 @@
           <input name="nom" required>
         </div>
 
-        {% if current_user.has_role("responsable_secteur") %}
+        {% if not can('scope:all_secteurs') %}
           <div>
             <label>Secteur (verrouillé)</label>
             <input value="{{ current_user.secteur_assigne }}" disabled>

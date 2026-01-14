@@ -320,25 +320,46 @@
         <div class="brand">App Gestion</div>
 
         {% if current_user.is_authenticated %}
-          {% if not current_user.has_role("admin_tech") %}
+          {% if can('dashboard:view') %}
             <a class="pill {% if ep.startswith('main.dashboard') %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard 📊</a>
+          {% endif %}
+          {% if can('subventions:view') %}
             <a class="pill {% if ep.startswith('main.subventions') %}active{% endif %}" href="{{ url_for('main.subventions_list') }}">Subventions 💶</a>
+          {% endif %}
+          {% if can('depenses:create') %}
             <a class="pill {% if ep.startswith('budget.depense_new') %}active{% endif %}" href="{{ url_for('budget.depense_new') }}">Nouvelle dépense ➕💸</a>
-			<a class="pill {% if ep.startswith('budget.depenses_list') %}active{% endif %}" href="{{ url_for('budget.depenses_list') }}">Dépenses 💸</a>
+          {% endif %}
+          {% if can('depenses:view') %}
+            <a class="pill {% if ep.startswith('budget.depenses_list') %}active{% endif %}" href="{{ url_for('budget.depenses_list') }}">Dépenses 💸</a>
+          {% endif %}
+          {% if can('projets:view') %}
             <a class="pill {% if ep.startswith('projets.') %}active{% endif %}" href="{{ url_for('projets.projets_list') }}">Projets 🗂️</a>
+          {% endif %}
+          {% if can('participants:view') or can('participants:view_all') %}
             <a class="pill {% if ep.startswith('participants.') %}active{% endif %}" href="{{ url_for('participants.list_participants') }}">Participants 👥</a>
+          {% endif %}
+          {% if can('inventaire:view') %}
             <a class="pill {% if ep.startswith('inventaire_materiel.') %}active{% endif %}" href="{{ url_for('inventaire_materiel.list_items') }}">Inventaire 📦</a>
+          {% endif %}
+          {% if can('ateliers:view') %}
             <a class="pill {% if ep.startswith('activite.') or ep.startswith('kiosk.') %}active{% endif %}" href="{{ url_for('activite.index') }}">Émargement ✍️</a>
+          {% endif %}
+          {% if can('pedagogie:view') %}
             <a class="pill" href="{{ url_for('pedagogie.referentiels_list') }}">Pédagogie (Config) ⚙️📘</a>
-			<a class="pill" href="{{ url_for('pedagogie.suivi_pedagogique') }}">Suivi Pédagogique 📈🎓</a>
-			<a class="pill" href="{{ url_for('bilans.bilans_lourds', year=2026) }}">Bilans lourds 🧠</a>
-			<a class="pill {% if ep.startswith('main.stats_bilans') or ep.startswith('main.bilan_global') or ep.startswith('main.stats') %}active{% endif %}" href="{{ url_for('main.stats_bilans') }}">Stats &amp; bilans 🧠📊</a>
+            <a class="pill" href="{{ url_for('pedagogie.suivi_pedagogique') }}">Suivi Pédagogique 📈🎓</a>
+          {% endif %}
+          {% if can('bilans:view') %}
+            <a class="pill" href="{{ url_for('bilans.bilans_lourds', year=2026) }}">Bilans lourds 🧠</a>
+            <a class="pill {% if ep.startswith('main.stats_bilans') or ep.startswith('main.bilan_global') or ep.startswith('main.stats') %}active{% endif %}" href="{{ url_for('main.stats_bilans') }}">Stats &amp; bilans 🧠📊</a>
+          {% endif %}
+          {% if can('statsimpact:view') or can('statsimpact:view_all') %}
             <a class="pill {% if ep.startswith('statsimpact.') %}active{% endif %}" href="{{ url_for('statsimpact.dashboard') }}">Données ateliers 🛠️📋</a>
+          {% endif %}
+          {% if can('controle:view') %}
             <a class="pill {% if ep.startswith('main.controle') %}active{% endif %}" href="{{ url_for('main.controle') }}">Contrôle</a>
-          {% else %}
-            <a class="pill {% if ep.startswith('main.dashboard') %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Dashboard</a>
+          {% endif %}
+          {% if can('admin:users') %}
             <a class="pill {% if ep.startswith('admin.users') %}active{% endif %}" href="{{ url_for('admin.users') }}">Équipe</a>
-            <a class="pill {% if ep.startswith('main.controle') %}active{% endif %}" href="{{ url_for('main.controle') }}">Contrôle ⚙</a>
           {% endif %}
 
           <div class="right">

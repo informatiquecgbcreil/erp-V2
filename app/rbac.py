@@ -100,37 +100,17 @@ ROLE_TEMPLATES: dict[str, dict[str, Iterable[str]]] = {
         ],
     },
 
-    # Direction: accès global total
+    # Direction/directrice: accès global total
     "direction": {
         "perms": [p for (p, _) in DEFAULT_PERMS],
     },
+    "directrice": {
+        "perms": [p for (p, _) in DEFAULT_PERMS],
+    },
 
-    # Finance: pilotage complet budget/subv/dépenses/projets + lecture globale stats/bilans
+    # Finance: accès global total (pilotage complet)
     "finance": {
-        "perms": [
-            "dashboard:view",
-            "scope:all_secteurs",
-
-            "projets:view", "projets:edit", "projets:delete", "projets:files",
-
-            "aap:view", "aap:charges_view", "aap:charges_edit",
-            "aap:produits_view", "aap:produits_edit",
-            "aap:ventilation_view", "aap:ventilation_edit",
-            "aap:synthese_view", "aap:export",
-
-            "subventions:view", "subventions:edit", "subventions:delete", "subventions:link",
-
-            "depenses:view", "depenses:create", "depenses:edit", "depenses:delete", "depenses:imputer_aap",
-
-            "ateliers:view", "ateliers:sync",
-            "emargement:view",
-
-            "participants:view_all",
-            "inventaire:view",
-
-            "stats:view_all", "statsimpact:view_all",
-            "bilans:view",
-        ],
+        "perms": [p for (p, _) in DEFAULT_PERMS],
     },
 
     # Responsable secteur: "presque direction" MAIS borné au secteur (contrôlé dans les routes)

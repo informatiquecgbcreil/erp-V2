@@ -17,7 +17,8 @@ class BilansScope:
 
 def scope_for_user(user) -> BilansScope:
     """Détermine le périmètre autorisé pour un utilisateur."""
-    if getattr(user, "role", None) in ("finance", "direction"):
+    has_perm = getattr(user, "has_perm", None)
+    if callable(has_perm) and has_perm("scope:all_secteurs"):
         return BilansScope(secteurs=None)
     # responsable_secteur : un seul secteur
     sec = getattr(user, "secteur_assigne", None)

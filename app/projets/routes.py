@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app, send_from_directory
 from flask_login import login_required, current_user
-from app.rbac import require_perm
+from app.rbac import require_perm, can, can_access_secteur
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
@@ -120,11 +120,7 @@ TARGET_OP_CHOICES = {
 
 
 def can_see_secteur(secteur: str) -> bool:
-    if current_user.role in ("directrice", "finance"):
-        return True
-    if current_user.role == "responsable_secteur":
-        return current_user.secteur_assigne == secteur
-    return False
+    return can_access_secteur(secteur)
 
 def ensure_projets_folder():
     folder = os.path.join(current_app.root_path, "..", "static", "uploads", "projets")
@@ -140,12 +136,10 @@ def allowed_cr(filename: str) -> bool:
 
 @bp.route("/projets")
 @login_required
+@require_perm("projets:view")
 def projets_list():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     q = Projet.query
-    if current_user.role == "responsable_secteur":
+    if not can("scope:all_secteurs"):
         q = q.filter(Projet.secteur == current_user.secteur_assigne)
 
     projets = q.order_by(Projet.created_at.desc()).all()
@@ -154,10 +148,8 @@ def projets_list():
 
 @bp.route("/projets/new", methods=["GET", "POST"])
 @login_required
+@require_perm("projets:edit")
 def projets_new():
-    if current_user.role == "admin_tech":
-        abort(403)
-
     secteurs = current_app.config.get("SECTEURS", [])
 
     if request.method == "POST":
@@ -165,7 +157,7 @@ def projets_new():
         secteur = (request.form.get("secteur") or "").strip()
         description = (request.form.get("description") or "").strip()
 
-        if current_user.role == "responsable_secteur":
+        if not can("scope:all_secteurs"):
             secteur = current_user.secteur_assigne
 
         if not nom or not secteur:
@@ -187,15 +179,15 @@ def projets_new():
 
 @bp.route("/projets/<int:projet_id>", methods=["GET", "POST"])
 @login_required
+@require_perm("projets:view")
 def projets_edit(projet_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     p = Projet.query.get_or_404(projet_id)
     if not can_see_secteur(p.secteur):
         abort(403)
 
     if request.method == "POST":
+        if not can("projets:edit"):
+            abort(403)
         action = request.form.get("action") or ""
 
         if action == "update":
@@ -221,6 +213,8 @@ def projets_edit(projet_id):
             return redirect(url_for("projets.projets_edit", projet_id=p.id))
 
         if action == "upload_cr":
+            if not can("projets:files"):
+                abort(403)
             file = request.files.get("cr_file")
             if not file or not file.filename:
                 flash("Aucun fichier.", "danger")
@@ -244,6 +238,8 @@ def projets_edit(projet_id):
             return redirect(url_for("projets.projets_edit", projet_id=p.id))
 
         if action == "toggle_subvention":
+            if not can("subventions:link"):
+                abort(403)
             sub_id = int(request.form.get("subvention_id") or 0)
             s = Subvention.query.get_or_404(sub_id)
 
@@ -264,6 +260,8 @@ def projets_edit(projet_id):
 
         # ---- Liens projet <-> ateliers ----
         if action == "toggle_atelier":
+            if not can("ateliers:edit"):
+                abort(403)
             atelier_id = int(request.form.get("atelier_id") or 0)
             a = AtelierActivite.query.get_or_404(atelier_id)
             if a.secteur != p.secteur or a.is_deleted:
@@ -460,8 +458,7 @@ def projets_delete(projet_id: int):
     """
     projet = Projet.query.get_or_404(projet_id)
 
-    # droits : admin global ou même secteur
-    if not current_user.is_authenticated and current_user.role == "admin_tech" and getattr(projet, "secteur", None) != getattr(current_user, "secteur_assigne", None):
+    if not can_access_secteur(getattr(projet, "secteur", None)):
         flash("Accès refusé.", "danger")
         return redirect(url_for("projets.projets_list"))
 
@@ -511,10 +508,8 @@ def projets_delete(projet_id: int):
 
 @bp.route("/projets/cr/<int:projet_id>/download")
 @login_required
+@require_perm("projets:files")
 def projets_cr_download(projet_id):
-    if current_user.role == "admin_tech":
-        abort(403)
-
     p = Projet.query.get_or_404(projet_id)
     if not can_see_secteur(p.secteur):
         abort(403)
@@ -531,18 +526,25 @@ def projets_cr_download(projet_id):
 
 @bp.route("/projets/<int:projet_id>/budget")
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:view")
 def projet_budget_home(projet_id):
+    projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     return redirect(url_for("projets.projet_budget_charges", projet_id=projet_id))
 
 
 @bp.route("/projets/<int:projet_id>/budget/charges", methods=["GET", "POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:charges_view")
 def projet_budget_charges(projet_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
 
     if request.method == "POST":
+        if not can("aap:charges_edit"):
+            abort(403)
         libelle = (request.form.get("libelle") or "").strip()
         bloc = (request.form.get("bloc") or "directe").strip()
         code_plan = (request.form.get("code_plan") or "60").strip()
@@ -577,9 +579,11 @@ def projet_budget_charges(projet_id):
 
 @bp.route("/projets/<int:projet_id>/budget/charges/<int:charge_id>/edit", methods=["GET", "POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:charges_edit")
 def projet_budget_charge_edit(projet_id, charge_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     charge = ChargeProjet.query.filter_by(id=charge_id, projet_id=projet.id).first_or_404()
 
     if request.method == "POST":
@@ -604,9 +608,11 @@ def projet_budget_charge_edit(projet_id, charge_id):
 
 @bp.route("/projets/<int:projet_id>/budget/charges/<int:charge_id>/delete", methods=["POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:charges_edit")
 def projet_budget_charge_delete(projet_id, charge_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     charge = ChargeProjet.query.filter_by(id=charge_id, projet_id=projet.id).first_or_404()
     db.session.delete(charge)
     db.session.commit()
@@ -616,11 +622,15 @@ def projet_budget_charge_delete(projet_id, charge_id):
 
 @bp.route("/projets/<int:projet_id>/budget/produits", methods=["GET", "POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:produits_view")
 def projet_budget_produits(projet_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
 
     if request.method == "POST":
+        if not can("aap:produits_edit"):
+            abort(403)
         financeur = (request.form.get("financeur") or "").strip()
         categorie = (request.form.get("categorie") or "autre").strip()
         statut = (request.form.get("statut") or "prevu").strip()
@@ -659,9 +669,11 @@ def projet_budget_produits(projet_id):
 
 @bp.route("/projets/<int:projet_id>/budget/produits/<int:produit_id>/edit", methods=["GET", "POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:produits_edit")
 def projet_budget_produit_edit(projet_id, produit_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     produit = ProduitProjet.query.filter_by(id=produit_id, projet_id=projet.id).first_or_404()
 
     if request.method == "POST":
@@ -688,9 +700,11 @@ def projet_budget_produit_edit(projet_id, produit_id):
 
 @bp.route("/projets/<int:projet_id>/budget/produits/<int:produit_id>/delete", methods=["POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:produits_edit")
 def projet_budget_produit_delete(projet_id, produit_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     produit = ProduitProjet.query.filter_by(id=produit_id, projet_id=projet.id).first_or_404()
     db.session.delete(produit)
     db.session.commit()
@@ -700,9 +714,11 @@ def projet_budget_produit_delete(projet_id, produit_id):
 
 @bp.route("/projets/<int:projet_id>/budget/ventilation", methods=["GET", "POST"])
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:ventilation_view")
 def projet_budget_ventilation(projet_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
 
     charges = ChargeProjet.query.filter_by(projet_id=projet.id).order_by(ChargeProjet.bloc.asc(), ChargeProjet.code_plan.asc(), ChargeProjet.id.asc()).all()
     produits = ProduitProjet.query.filter_by(projet_id=projet.id).order_by(ProduitProjet.categorie.asc(), ProduitProjet.financeur.asc()).all()
@@ -712,6 +728,8 @@ def projet_budget_ventilation(projet_id):
     vmap = {(v.charge_id, v.produit_id): v for v in existing}
 
     if request.method == "POST":
+        if not can("aap:ventilation_edit"):
+            abort(403)
         # matrice : v_<charge>_<produit> = montant
         # UX/sécurité : on refuse les ventilations incohérentes (somme > charge, somme > financeur)
 
@@ -800,9 +818,11 @@ def projet_budget_ventilation(projet_id):
 
 @bp.route("/projets/<int:projet_id>/budget/synthese")
 @login_required
-@require_perm("projets_edit")
+@require_perm("aap:synthese_view")
 def projet_budget_synthese(projet_id):
     projet = Projet.query.get_or_404(projet_id)
+    if not can_access_secteur(projet.secteur):
+        abort(403)
     charges = ChargeProjet.query.filter_by(projet_id=projet.id).all()
     produits = ProduitProjet.query.filter_by(projet_id=projet.id).all()
 

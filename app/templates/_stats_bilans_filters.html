@@ -8,7 +8,7 @@
     </select>
   </div>
 
-  {% if current_user.has_role('responsable_secteur') %}
+  {% if not can('scope:all_secteurs') %}
     <input type="hidden" name="secteur" value="{{ secteur }}">
   {% else %}
     <div style="min-width:220px">
